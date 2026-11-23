@@ -2,7 +2,7 @@
 
 Página de demostración de una recepcionista virtual para talleres mecánicos. Cuando el taller está cerrado, una asistente de voz coge la llamada y apunta los datos del cliente. A las 7:00 el taller recibe un correo con todas las llamadas de la tarde, las urgentes primero.
 
-**Verla:** https://borisdevops.com/recepcion-virtual-demo/
+**Verla:** https://taller-demo.github.io/recepcion-virtual-demo/
 
 ## Qué hay en la página
 
