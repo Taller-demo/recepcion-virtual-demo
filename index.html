@@ -167,6 +167,13 @@ button:active{transform:scale(.98)}
 .pill.alta{background:var(--urgent);color:#fff}
 .pill.normal{background:var(--tint);color:var(--soft);box-shadow:inset 0 0 0 1px var(--line)}
 
+/* idioma de la asistente: castellano o catalán */
+.idioma{display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin:0 0 22px}
+.idioma span{font-size:15px;color:var(--soft);margin-right:6px}
+.idioma button{background:transparent;color:var(--soft);border:1px solid var(--line);border-radius:999px;padding:6px 16px;min-height:40px;font-size:15px}
+.idioma button:hover{color:var(--ink);border-color:var(--soft)}
+.idioma button[aria-pressed="true"]{background:var(--ink);color:var(--paper);border-color:var(--ink)}
+
 .stage{display:grid;grid-template-columns:minmax(0,370px) minmax(0,1fr);gap:20px;align-items:start}
 @media (max-width:800px){.stage{grid-template-columns:1fr}}
 
@@ -358,6 +365,11 @@ footer .firma{font-family:var(--mono);font-size:13.5px}
     <h2>Las llamadas de ayer</h2>
     <p class="sec-note">Cinco casos de ejemplo de una tarde cualquiera. Elige uno y pulsa <b>Llamar al taller</b>. Mientras hablan, la ficha se va rellenando sola y verás por qué la llamada acaba siendo urgente o no.</p>
     <div class="picker" id="picker"></div>
+    <div class="idioma" id="idioma" role="group" aria-label="Idioma de la asistente">
+      <span>La asistente habla en</span>
+      <button type="button" data-idioma="es" aria-pressed="true">Castellano</button>
+      <button type="button" data-idioma="ca" aria-pressed="false" lang="ca">Català</button>
+    </div>
 
     <div class="stage">
       <div class="phone">
@@ -538,6 +550,7 @@ footer .firma{font-family:var(--mono);font-size:13.5px}
       <li><b>De los tres formatos:</b> el correo está hecho y funcionando. El Excel y el WhatsApp están diseñados, con el formato ya decidido, pendientes de montar.</li>
       <li><b>Falta montar:</b> el número de teléfono y el agente de voz que atiende. Es el siguiente paso, y depende del visto bueno del taller.</li>
       <li><b>En esta página:</b> los cinco avisos son casos de ejemplo y la voz es sintética, no es la grabación de una llamada real.</li>
+      <li><b>En catalán:</b> la asistente en catalán es una muestra con las voces del navegador. Falta comprobar que la plataforma de voz que se contrate atiende bien en catalán.</li>
       <li><b>En el sistema real</b> cada aviso lleva el audio de la llamada, para resolver una matrícula o un nombre que no se entendiera bien.</li>
     </ul>
     </div>
@@ -667,8 +680,46 @@ const CASOS = {
   }
 };
 
+/* Lo que dice la asistente cuando atiende en catalán, en el mismo orden que sus
+   frases del guion. El cliente sigue en castellano: en una llamada de aquí es normal. */
+const SALUDO_CA = 'Hola, has trucat a Taller Ejemplo. Ara mateix el taller és tancat, però sóc l\'assistent virtual i apuntaré les teves dades perquè demà a primera hora et truquin. La trucada es grava per poder-te atendre bé. Et sembla bé?';
+const COTXE_CA = 'Quin cotxe és? Marca i model, i si la tens a mà, la matrícula.';
+const TORNAR_CA = 'Et tornaré la trucada a aquest mateix número, oi? Si en prefereixes un altre, digue-m\'ho.';
+const CA = {
+  marc: [SALUDO_CA, 'Com et dius?', 'Què li passa al cotxe o què necessites?',
+    'Entesos. Si estàs en perill, truca al 112. Per a la grua o l\'assistència en carretera, contacta amb la teva asseguradora. Apunto la teva trucada com a urgent perquè demà t\'atenguin primer.',
+    COTXE_CA, TORNAR_CA,
+    'Perfecte, Marc. Ja està apuntat. Demà al matí et trucaran del taller. Que tinguis bona nit.'],
+  anna: [SALUDO_CA, 'Com et dius?', 'Què li passa al cotxe o què necessites?',
+    'Entesos, Anna. Ho apunto com a urgent perquè demà t\'atenguin primer. Mentrestant, millor que no facis servir el cotxe fins que el revisin.',
+    COTXE_CA,
+    'No passa res, ja te la preguntaran demà. Et torno la trucada a aquest mateix número, oi?',
+    'Perfecte, Anna. Ja està apuntat. Demà al matí et trucaran del taller. Que tinguis bona nit.'],
+  laura: [SALUDO_CA, 'Com et dius?', 'Què li passa al cotxe o què necessites?',
+    'És urgent? Pots continuar fent servir el cotxe o no?',
+    COTXE_CA, TORNAR_CA,
+    'Perfecte, Laura. Ja està apuntat. Demà al matí et trucaran del taller. Que tinguis bona tarda.'],
+  jordi: [SALUDO_CA, 'Com et dius?', 'Què li passa al cotxe o què necessites?',
+    'Això ho ha de valorar el mecànic. Ho apunto perquè t\'ho diguin quan et truquin.',
+    'És urgent? Pots continuar fent servir el cotxe o no?',
+    COTXE_CA, TORNAR_CA,
+    'T\'ho repeteixo: sis, quatre, quatre, dos, dos, dos, u, u, u. És correcte?',
+    'Perfecte, Jordi. Ja està apuntat. Demà al matí et trucaran del taller. Que tinguis bona tarda.'],
+  anon: [SALUDO_CA,
+    'Això t\'ho confirmaran demà quan et truquin. Com et dius?',
+    'Cap problema. Em dius, doncs, què necessites, per deixar-ho apuntat?',
+    'Apuntat. És urgent? Pots continuar fent servir el cotxe o no?',
+    'Perfecte. Demà al matí et trucaran del taller a aquest mateix número. Que tinguis bona nit.']
+};
+
 let casoActual = 'marc';
-const GUION = () => CASOS[casoActual].guion;
+let idioma = 'es';                       // idioma de la asistente: 'es' | 'ca'
+const GUION = () => {
+  const g = CASOS[casoActual].guion;
+  if (idioma !== 'ca') return g;
+  const frases = CA[casoActual].slice();
+  return g.map(t => t.who === 'bot' ? Object.assign({}, t, { text: frases.shift() || t.text }) : t);
+};
 
 /* ---------------- los cinco avisos del resumen ---------------- */
 const AVISOS = [
@@ -730,7 +781,8 @@ function tarjeta(a){
 let vozActiva = true;
 let motor = 'navegador';                 // 'claude' | 'navegador'
 let vozClaude = null;                    // la capacidad tts, cuando responde
-let vozBot = null, vozCliente = null, vocesEs = [];
+let vozBot = null, vozCliente = null, vocesEs = [], vocesCa = [];
+const vocesBot = () => idioma === 'ca' ? vocesCa : vocesEs;
 let timbreBot = 'buttery', timbreCliente = 'glassy';
 const TIMBRES = [['buttery','Cálida'],['rounded','Grave'],['airy','Suave'],['glassy','Clara']];
 
@@ -744,27 +796,32 @@ const esNatural = v => /natural|online|neural|premium|enhanced|siri/i.test(v.nam
 
 const nombreCorto = v => v.name
   .replace(/^(Microsoft|Google)\s+/i,'')
-  .replace(/\s*[-(]\s*(spanish|español|espa.ol).*$/i,'')
+  .replace(/\s*[-(]\s*(spanish|español|espa.ol|catalan|català|catal.n).*$/i,'')
   .replace(/\s*online\s*/i,' ')
   .replace(/\s*\(natural\)\s*/i,'')
   .trim();
 
 function pintaSelector(){
+  const lista = vocesBot();
   const grupos = [];
   if (vozClaude){
     grupos.push('<optgroup label="Voz de Claude">' +
       TIMBRES.map(([v,n]) => `<option value="c:${v}">${n}</option>`).join('') + '</optgroup>');
   }
-  if (vocesEs.length){
-    grupos.push('<optgroup label="Voces de este navegador">' +
-      vocesEs.map((v,i) => `<option value="n:${i}">${esc(nombreCorto(v))}${esNatural(v) ? ' · natural' : ''}</option>`).join('') +
+  if (lista.length){
+    grupos.push(`<optgroup label="${idioma === 'ca' ? 'Voces en catalán de este navegador' : 'Voces de este navegador'}">` +
+      lista.map((v,i) => `<option value="n:${i}">${esc(nombreCorto(v))}${esNatural(v) ? ' · natural' : ''}</option>`).join('') +
       '</optgroup>');
   }
   if (!grupos.length){
     selVoz.innerHTML = '<option>Sin voz disponible</option>';
     selVoz.disabled = true;
     badgeNat.hidden = true;
-    avisoVoz.textContent = 'Aquí no hay ninguna voz en español: la llamada se lee escrita.';
+    vozBot = null;
+    vozCliente = vocesEs[0] || null;
+    avisoVoz.textContent = idioma === 'ca'
+      ? 'Este navegador no tiene voz en catalán: lo que dice la asistente se lee escrito. Edge, Android y iPhone sí la tienen.'
+      : 'Aquí no hay ninguna voz en español: la llamada se lee escrita.';
     avisoVoz.style.display = 'block';
     return;
   }
@@ -786,14 +843,17 @@ function aplicaSeleccion(val){
     avisoVoz.style.display = 'none';
   } else {
     motor = 'navegador';
-    vozBot = vocesEs[Number(val.slice(2))] || null;
-    vozCliente = vocesEs.find(v => v !== vozBot && esNatural(v) === esNatural(vozBot)) || vozBot;
+    vozBot = vocesBot()[Number(val.slice(2))] || null;
+    // En catalán el cliente sigue en castellano: le damos la mejor voz española.
+    vozCliente = idioma === 'ca'
+      ? (vocesEs.find(v => esNatural(v) === esNatural(vozBot)) || vocesEs[0] || null)
+      : (vocesEs.find(v => v !== vozBot && esNatural(v) === esNatural(vozBot)) || vozBot);
     const natural = !!(vozBot && esNatural(vozBot));
     badgeNat.textContent = 'Natural';
     badgeNat.hidden = !natural;
     avisoVoz.textContent = vozClaude
       ? 'Esta voz suena robótica. Arriba del todo tienes la voz de Claude.'
-      : 'Esta voz suena robótica. Abre la página en Microsoft Edge: trae voces neuronales en español.';
+      : `Esta voz suena robótica. Abre la página en Microsoft Edge: trae voces neuronales en ${idioma === 'ca' ? 'catalán' : 'español'}.`;
     avisoVoz.style.display = natural ? 'none' : 'block';
   }
 }
@@ -801,15 +861,16 @@ function aplicaSeleccion(val){
 function cargaVoces(){
   let voces = [];
   try { voces = window.speechSynthesis ? speechSynthesis.getVoices() : []; } catch(e){ voces = []; }
-  vocesEs = voces.filter(v => /^es/i.test(v.lang));
   // Primero las naturales, luego las de España, luego por nombre.
-  vocesEs.sort((a,b) => {
+  const ordena = lista => lista.sort((a,b) => {
     const n = (esNatural(b) ? 1 : 0) - (esNatural(a) ? 1 : 0);
     if (n) return n;
-    const e = (/es[-_]ES/i.test(b.lang) ? 1 : 0) - (/es[-_]ES/i.test(a.lang) ? 1 : 0);
+    const e = (/[-_]ES/i.test(b.lang) ? 1 : 0) - (/[-_]ES/i.test(a.lang) ? 1 : 0);
     if (e) return e;
     return a.name.localeCompare(b.name);
   });
+  vocesEs = ordena(voces.filter(v => /^es/i.test(v.lang)));
+  vocesCa = ordena(voces.filter(v => /^ca/i.test(v.lang)));
   pintaSelector();
 }
 
@@ -841,25 +902,26 @@ async function habla(texto, quien, mio){
 
   if (motor === 'claude' && vozClaude){
     try {
-      await vozClaude.speak(texto, { voice: quien === 'bot' ? timbreBot : timbreCliente, language: 'es' });
+      await vozClaude.speak(texto, { voice: quien === 'bot' ? timbreBot : timbreCliente, language: quien === 'bot' ? idioma : 'es' });
       return;
     } catch(err){
       if (mio !== turno) return;                       // han colgado: no es un fallo
       if (err && err.code === 'rate_limited') return espera(estimado);
       motor = 'navegador';                             // caemos a la voz del navegador
-      if (vocesEs.length){ selVoz.value = 'n:0'; aplicaSeleccion('n:0'); }
+      if (vocesBot().length){ selVoz.value = 'n:0'; aplicaSeleccion('n:0'); }
     }
   }
 
-  if (!vocesEs.length || !window.speechSynthesis) return espera(estimado);
+  const voz = quien === 'bot' ? vozBot : vozCliente;
+  if (!voz || !window.speechSynthesis) return espera(estimado);
   return new Promise(resolve => {
     let hecho = false;
     const fin = () => { if (!hecho){ hecho = true; clearTimeout(red); resolve(); } };
     const red = setTimeout(fin, estimado * 2.2 + 2500);   // red de seguridad: onend no siempre dispara
     try {
       const u = new SpeechSynthesisUtterance(texto);
-      u.voice = quien === 'bot' ? vozBot : vozCliente;
-      u.lang = (u.voice && u.voice.lang) || 'es-ES';
+      u.voice = voz;
+      u.lang = voz.lang;
       u.rate = quien === 'bot' ? 1.0 : 1.04;
       // Solo bajamos el tono si al cliente le ha tocado la misma voz que a la asistente.
       u.pitch = (quien === 'cliente' && vozCliente === vozBot) ? 0.8 : 1.0;
@@ -897,6 +959,7 @@ function reloj(encendido){
 function burbuja(t){
   const d = document.createElement('div');
   d.className = 'bubble ' + t.who;
+  if (t.who === 'bot' && idioma === 'ca') d.lang = 'ca';
   d.innerHTML = `<span class="lbl">${t.who === 'bot' ? 'Asistente' : esc(CASOS[casoActual].quien)}</span>${esc(t.text)}`;
   chat.appendChild(d);
   chat.scrollTop = chat.scrollHeight;
@@ -1040,6 +1103,18 @@ eligeCaso('marc', false);
 // El botón de arriba lleva a la llamada de Marc y la arranca: el clic permite sonar.
 document.getElementById('cta-escuchar').addEventListener('click', () => {
   eligeCaso('marc', true);
+});
+
+/* ---------------- idioma de la asistente ---------------- */
+document.getElementById('idioma').addEventListener('click', e => {
+  const b = e.target.closest('[data-idioma]');
+  if (!b || b.dataset.idioma === idioma) return;
+  idioma = b.dataset.idioma;
+  document.querySelectorAll('#idioma [data-idioma]').forEach(x =>
+    x.setAttribute('aria-pressed', String(x === b)));
+  callaTodo();
+  pintaSelector();
+  eligeCaso(casoActual, false);
 });
 
 /* ---------------- tema claro / oscuro ---------------- */
