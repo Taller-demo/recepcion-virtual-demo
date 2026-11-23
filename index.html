@@ -1,0 +1,1069 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Recepción fuera de horario · demo</title>
+<meta name="description" content="Demo de una recepcionista virtual para talleres: coge las llamadas cuando el taller está cerrado y a las 7:00 manda el resumen, urgentes primero.">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Ccircle cx='16' cy='16' r='15' fill='%230b0b0b'/%3E%3Ctext x='16' y='20.5' font-family='monospace' font-size='12' font-weight='700' fill='white' text-anchor='middle'%3ERV%3C/text%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=Geist+Mono:wght@400;600&display=swap" rel="stylesheet">
+<style>
+/* Sistema visual tomado del portfolio (borisdevops.com): Geist + Geist Mono, monocromo,
+   nav en píldora. El único color es el rojo de "urgente", porque es información. */
+:root{
+  --paper:#fafafa;
+  --card:#ffffff;
+  --ink:#0b0b0b;
+  --soft:#6b6b6b;
+  --line:#d9d9d9;
+  --tint:#f0f0f0;
+  --urgent:#c42b1c;
+  --urgent-soft:#fdeceb;
+  --phone:#0b0b0b;
+  --phone-2:#1c1c1c;
+  --phone-ink:#f2f2f2;
+  --phone-soft:#9a9a9a;
+  --phone-line:rgba(255,255,255,.14);
+  --sans:"Geist",system-ui,-apple-system,sans-serif;
+  --mono:"Geist Mono",ui-monospace,monospace;
+  --ease:cubic-bezier(.22,1,.36,1);
+  color-scheme:light;
+}
+@media (prefers-color-scheme:dark){
+  :root:not([data-theme="light"]){
+    --paper:#000000;--card:#111111;--ink:#f2f2f2;--soft:#9a9a9a;--line:#272727;--tint:#1c1c1c;
+    --urgent:#ff6b5b;--urgent-soft:#2a1210;--phone:#111111;--phone-2:#222222;
+    color-scheme:dark;
+  }
+}
+:root[data-theme="dark"]{
+  --paper:#000000;--card:#111111;--ink:#f2f2f2;--soft:#9a9a9a;--line:#272727;--tint:#1c1c1c;
+  --urgent:#ff6b5b;--urgent-soft:#2a1210;--phone:#111111;--phone-2:#222222;
+  color-scheme:dark;
+}
+
+*{box-sizing:border-box}
+html{scroll-padding-top:90px}
+@media (prefers-reduced-motion:no-preference){html{scroll-behavior:smooth}}
+body{
+  margin:0;background:var(--paper);color:var(--ink);
+  font-family:var(--sans);font-size:17px;line-height:1.6;-webkit-font-smoothing:antialiased;
+}
+h1,h2,h3{text-wrap:balance;margin:0}
+p,li{text-wrap:pretty}
+a{color:inherit}
+:focus-visible{outline:2px solid var(--ink);outline-offset:3px}
+.ico{width:18px;height:18px;flex:none;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+.wrap{max-width:1100px;margin:0 auto;padding:0 32px 80px}
+@media (max-width:560px){.wrap{padding:0 18px 64px}}
+
+/* ---------- nav flotante, como en el portfolio ---------- */
+.nav{
+  position:sticky;top:12px;z-index:50;display:flex;align-items:center;gap:22px;
+  width:fit-content;max-width:calc(100% - 24px);margin:12px auto 0;padding:7px;
+  border:1px solid var(--line);border-radius:999px;
+}
+.nav::before{
+  content:"";position:absolute;inset:0;z-index:-1;border-radius:inherit;
+  background:color-mix(in srgb,var(--paper) 74%,transparent);
+  backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);
+}
+.logo{display:flex;align-items:center;gap:9px;text-decoration:none;font-weight:600;font-size:14px;padding-right:4px}
+.logo .mk{display:grid;place-items:center;width:34px;height:34px;border:1px solid var(--ink);border-radius:50%;font-family:var(--mono);font-size:11.5px;font-weight:600}
+.nav nav{display:flex;gap:22px}
+.nav nav a{font-size:14px;text-decoration:none;color:var(--soft);transition:color .3s var(--ease)}
+.nav nav a:hover{color:var(--ink)}
+.theme-btn{
+  background:none;border:1px solid var(--line);border-radius:999px;color:var(--ink);
+  width:36px;height:36px;min-height:0;padding:0;display:grid;place-items:center;cursor:pointer;
+  transition:border-color .3s var(--ease);
+}
+.theme-btn:hover{border-color:var(--ink)}
+.theme-btn .ico{width:16px;height:16px}
+:root .theme-btn .sol{display:none}
+:root[data-theme="dark"] .theme-btn .sol{display:block}
+:root[data-theme="dark"] .theme-btn .luna{display:none}
+@media (max-width:640px){.nav nav{display:none}.nav{gap:14px;padding-right:7px}}
+
+/* ---------- cabecera ---------- */
+.hero{padding:88px 0 8px}
+.kicker{font-family:var(--mono);font-size:13.5px;color:var(--soft);margin:0}
+h1{
+  font-size:clamp(40px,7.4vw,84px);line-height:1;letter-spacing:-.045em;font-weight:700;
+  margin:20px 0 22px;max-width:13ch;
+  background:linear-gradient(180deg,var(--ink) 55%,color-mix(in srgb,var(--ink) 55%,var(--paper)));
+  -webkit-background-clip:text;background-clip:text;color:transparent;
+}
+.lede{font-size:clamp(18px,2.2vw,20px);color:var(--soft);max-width:34em;margin:0}
+.hero-actions{display:flex;align-items:center;gap:14px 22px;flex-wrap:wrap;margin-top:32px}
+.btn-primary{
+  display:inline-flex;align-items:center;gap:10px;min-height:52px;
+  background:var(--ink);color:var(--paper);text-decoration:none;
+  font-weight:600;font-size:16.5px;padding:13px 24px;border-radius:999px;
+  transition:transform .2s var(--ease),opacity .2s;
+}
+.btn-primary:hover{opacity:.86}
+.btn-primary:active{transform:scale(.98)}
+@media (max-width:420px){.btn-primary{font-size:15.5px;padding:13px 20px;white-space:nowrap}}
+.btn-link{font-weight:500;font-size:16px;color:var(--soft);text-underline-offset:5px}
+.btn-link:hover{color:var(--ink)}
+
+/* ---------- la tarde, en horas ---------- */
+.dia{
+  list-style:none;margin:72px 0 0;padding:0;
+  display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:0 24px;
+}
+.dia li{position:relative;padding-top:24px;border-top:1px solid var(--line)}
+.dia li::before{
+  content:"";position:absolute;top:-6px;left:0;width:11px;height:11px;border-radius:50%;
+  background:var(--paper);border:1.5px solid var(--soft);
+}
+.dia li:last-child{border-top:2px solid var(--ink)}
+.dia li:last-child::before{background:var(--ink);border-color:var(--ink);top:-7px}
+.dia .hora{display:block;font-family:var(--mono);font-size:22px;font-weight:600;letter-spacing:-.02em;margin-bottom:10px;font-variant-numeric:tabular-nums}
+.dia b{display:block;font-weight:600;font-size:17px;margin-bottom:2px}
+.dia span.d{display:block;font-size:15px;color:var(--soft)}
+@media (max-width:760px){
+  .dia{grid-template-columns:1fr;margin-top:52px;padding-left:6px}
+  .dia li{border-top:0;border-left:1px solid var(--line);padding:0 0 26px 24px}
+  .dia li:last-child{border-top:0;border-left:2px solid var(--ink);padding-bottom:0}
+  .dia li::before{top:4px;left:-6px}
+  .dia li:last-child::before{top:4px;left:-7px}
+}
+
+/* ---------- secciones ---------- */
+section{padding:110px 0 0}
+.sec-tag{font-family:var(--mono);font-size:13.5px;color:var(--soft);margin:0 0 14px}
+h2{font-size:clamp(30px,4.6vw,52px);line-height:1.08;letter-spacing:-.035em;font-weight:700;max-width:16em;margin-bottom:16px}
+.sec-note{color:var(--soft);font-size:18px;margin:0 0 32px;max-width:36em}
+.sec-note b{color:var(--ink);font-weight:600}
+
+button{
+  font-family:var(--sans);font-size:15px;font-weight:600;cursor:pointer;
+  border-radius:12px;padding:10px 14px;border:1px solid transparent;
+  min-height:44px;display:inline-flex;align-items:center;justify-content:center;gap:8px;
+  transition:transform .2s var(--ease),opacity .2s,border-color .3s var(--ease),background-color .3s var(--ease);
+}
+button:active{transform:scale(.98)}
+
+/* ---------- selector de llamadas ---------- */
+.picker{display:flex;gap:10px;flex-wrap:wrap;margin:0 0 20px}
+.chip{
+  display:flex;align-items:center;gap:12px;background:var(--card);color:var(--ink);
+  border:1px solid var(--line);border-radius:16px;padding:10px 16px;text-align:left;min-height:58px;font-weight:400;
+}
+.chip:hover{border-color:var(--soft)}
+.chip[aria-pressed="true"]{border-color:var(--ink);box-shadow:inset 0 0 0 1px var(--ink)}
+.chip-txt{display:flex;flex-direction:column;line-height:1.3}
+.chip-txt b{font-size:16px;font-weight:600}
+.chip-txt span{font-size:14px;color:var(--soft)}
+@media (max-width:560px){
+  .picker{display:grid;grid-template-columns:1fr 1fr}
+  .chip{flex-direction:column;align-items:flex-start;gap:6px}
+}
+.pill{display:inline-block;font-size:12.5px;font-weight:600;padding:3px 10px;border-radius:999px;white-space:nowrap;line-height:1.5}
+.pill.alta{background:var(--urgent);color:#fff}
+.pill.normal{background:var(--tint);color:var(--soft);box-shadow:inset 0 0 0 1px var(--line)}
+
+.stage{display:grid;grid-template-columns:minmax(0,370px) minmax(0,1fr);gap:20px;align-items:start}
+@media (max-width:800px){.stage{grid-template-columns:1fr}}
+
+/* ---------- el teléfono ---------- */
+.phone{
+  background:var(--phone);color:var(--phone-ink);border-radius:28px;
+  padding:18px;display:flex;flex-direction:column;min-height:470px;
+  border:1px solid var(--line);
+}
+.phone-top{display:flex;align-items:center;justify-content:space-between;padding:2px 4px 14px;border-bottom:1px solid var(--phone-line)}
+.phone-who{display:flex;flex-direction:column}
+.phone-who b{font-size:17px;font-weight:600}
+.phone-who span{font-size:14px;color:var(--phone-soft)}
+.timer{font-family:var(--mono);font-variant-numeric:tabular-nums;font-size:15px;color:var(--phone-soft)}
+.dot{width:7px;height:7px;border-radius:50%;background:#3ddc84;display:inline-block;margin-right:7px;vertical-align:1px}
+.dot.off{background:#666}
+.chat{flex:1;overflow-y:auto;padding:16px 2px;display:flex;flex-direction:column;gap:10px;max-height:380px}
+.chat .idle{color:var(--phone-soft);font-size:16px;margin:auto;text-align:center;padding:0 18px}
+.bubble{max-width:86%;padding:10px 14px;border-radius:18px;font-size:15.5px;line-height:1.45;animation:pop .3s var(--ease)}
+.bubble.bot{background:var(--phone-2);color:var(--phone-ink);border-bottom-left-radius:6px;align-self:flex-start}
+.bubble.cliente{background:#f2f2f2;color:#0b0b0b;border-bottom-right-radius:6px;align-self:flex-end}
+.bubble .lbl{display:block;font-size:12.5px;opacity:.6;margin-bottom:1px;font-weight:600}
+@keyframes pop{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+@media (prefers-reduced-motion:reduce){.bubble{animation:none}}
+
+.controls{display:flex;gap:8px;flex-wrap:wrap;padding-top:14px;border-top:1px solid var(--phone-line)}
+.btn-call{background:#f2f2f2;color:#0b0b0b;flex:1 1 100%;font-size:16.5px;min-height:52px;border-radius:999px}
+.btn-call:hover{opacity:.9}
+.btn-call.colgar{background:#ff5b4a;color:#fff}
+.btn-ghost{flex:1;background:transparent;color:var(--phone-ink);border-color:var(--phone-line);border-radius:999px}
+.btn-ghost:hover{border-color:var(--phone-soft)}
+.btn-ghost[aria-pressed="false"]{color:#ff9c90;border-color:rgba(255,91,74,.5)}
+.btn-ghost[aria-pressed="false"] .on,.btn-ghost[aria-pressed="true"] .off{display:none}
+.voicebar{display:flex;align-items:center;gap:10px;margin-top:12px;flex-wrap:wrap}
+.voicebar label{font-size:14px;color:var(--phone-soft);font-weight:500}
+.voicebar select{
+  flex:1;min-width:130px;background:var(--phone-2);color:var(--phone-ink);
+  border:1px solid var(--phone-line);border-radius:10px;padding:8px 10px;
+  font-family:var(--sans);font-size:15px;min-height:40px;
+}
+.voicebar select:focus-visible{outline:2px solid #f2f2f2;outline-offset:1px}
+.badge-nat{font-size:12.5px;font-weight:600;color:#0b0b0b;background:#f2f2f2;padding:3px 10px;border-radius:999px}
+.voice-warn{font-size:14px;color:var(--phone-soft);margin:10px 2px 0;display:none;line-height:1.45}
+
+/* ---------- ficha ---------- */
+.ficha,.reglas,.mail,.truth{background:var(--card);border:1px solid var(--line);border-radius:20px}
+.ficha{padding:22px 24px}
+.ficha h3{font-size:20px;font-weight:600;letter-spacing:-.01em;margin-bottom:2px}
+.ficha .sub{font-family:var(--mono);font-size:13.5px;color:var(--soft);margin:0 0 16px}
+.fields{display:flex;flex-direction:column}
+.field{display:grid;grid-template-columns:128px minmax(0,1fr);gap:12px;padding:11px 0;border-top:1px solid var(--line);align-items:start}
+.field:first-child{border-top:0}
+.field .k{font-size:15px;color:var(--soft)}
+.field .v{font-size:16px;min-height:1.45em}
+.field .v.empty{color:var(--soft);opacity:.55}
+.field.just-filled{animation:flash 1.1s var(--ease)}
+@keyframes flash{0%{background:var(--tint)}100%{background:transparent}}
+@media (prefers-reduced-motion:reduce){.field.just-filled{animation:none}}
+@media (max-width:460px){.field{grid-template-columns:104px minmax(0,1fr)}}
+.porque{margin-top:18px;padding:16px 18px;background:var(--tint);border-radius:14px}
+.porque b{display:block;font-size:14px;font-weight:600;margin-bottom:3px}
+.porque p{margin:0;font-size:16px;color:var(--soft)}
+
+.reglas{margin-top:20px;padding:22px 24px}
+.reglas h3{font-size:20px;font-weight:600;letter-spacing:-.01em;margin-bottom:16px}
+.reglas-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:14px}
+.regla{display:flex;gap:12px;align-items:flex-start;padding:14px 16px;border:1px solid var(--line);border-radius:14px}
+.regla.alta{border-color:color-mix(in srgb,var(--urgent) 45%,transparent);background:var(--urgent-soft)}
+.regla p{margin:0;font-size:16px}
+.regla .pill{flex:none;margin-top:2px}
+.reglas-pie{margin:16px 0 0;font-size:15px;color:var(--soft);max-width:44em}
+
+/* ---------- pestañas de formato ---------- */
+.tabs{display:inline-flex;gap:4px;margin:0 0 18px;padding:4px;border:1px solid var(--line);border-radius:999px;flex-wrap:wrap}
+.tab{background:transparent;color:var(--soft);border:0;border-radius:999px;padding:8px 18px;font-size:15.5px;min-height:40px}
+.tab:hover{color:var(--ink)}
+.tab[aria-selected="true"]{background:var(--ink);color:var(--paper)}
+.panel-note{font-size:16px;color:var(--soft);margin:0 0 16px;max-width:42em}
+.panel-note b{color:var(--ink);font-weight:600}
+
+/* ---------- correo ---------- */
+.mail{overflow:hidden}
+.mail-head{padding:18px 24px;border-bottom:1px solid var(--line)}
+.mail-meta{font-family:var(--mono);font-size:13px;color:var(--soft);display:flex;gap:8px;flex-wrap:wrap}
+.mail-meta b{color:var(--ink);font-weight:600}
+.mail-subject{font-size:21px;font-weight:600;letter-spacing:-.015em;margin:8px 0 2px}
+.mail-count{font-size:15px;color:var(--soft)}
+.mail-count .u{color:var(--urgent);font-weight:600}
+.mail-body{padding:18px 24px 24px}
+.group-title{font-size:17px;font-weight:600;margin:26px 0 12px}
+.group-title:first-child{margin-top:0}
+.aviso{border:1px solid var(--line);border-radius:16px;padding:16px 18px;margin-bottom:10px;background:var(--card)}
+.aviso.alta{border-color:color-mix(in srgb,var(--urgent) 45%,transparent);background:var(--urgent-soft);box-shadow:inset 4px 0 0 var(--urgent)}
+.aviso-top{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:10px}
+.aviso-name{font-size:19px;font-weight:600;letter-spacing:-.01em}
+.aviso-name.anon{color:var(--soft);font-style:italic;font-weight:500}
+.mark{font-size:13px;font-weight:600;background:var(--ink);color:var(--paper);padding:3px 10px;border-radius:999px}
+.play{
+  margin-left:auto;background:var(--card);color:var(--ink);
+  border:1px solid var(--line);border-radius:999px;padding:7px 14px;font-size:14.5px;min-height:40px;
+}
+.play:hover{border-color:var(--ink)}
+.play .ico{width:14px;height:14px;fill:currentColor;stroke:none}
+.rows{display:grid;grid-template-columns:auto minmax(0,1fr);gap:5px 18px;font-size:16px;margin:0}
+.rows dt{color:var(--soft);font-size:15px;white-space:nowrap}
+.rows dd{margin:0}
+.tel{font-family:var(--mono);font-weight:600;color:var(--ink);text-decoration:underline;text-underline-offset:3px;text-decoration-color:var(--line);font-variant-numeric:tabular-nums}
+.tel:hover{text-decoration-color:var(--ink)}
+.from{color:var(--soft);font-size:15px}
+.missing{color:var(--urgent);font-weight:600}
+
+/* ---------- Excel: se ve como Excel en los dos temas, a propósito ---------- */
+.sheet{border:1px solid var(--line);border-radius:14px;overflow:hidden;background:#fff}
+.sheet-scroll{overflow-x:auto}
+table.grid{border-collapse:collapse;font-size:12.5px;min-width:900px;width:100%;background:#fff;color:#1b1b1b}
+table.grid td,table.grid th{border:1px solid #d6d9dc;padding:5px 7px;text-align:left;vertical-align:top}
+.grid .colhead{background:#f1f3f5;color:#5d6166;text-align:center;font-weight:600;font-size:11px}
+.grid .rownum{background:#f1f3f5;color:#5d6166;text-align:center;width:30px;font-variant-numeric:tabular-nums;font-size:11px}
+.grid .titulo{font-weight:700;font-size:14px}
+.grid .leyenda{font-style:italic;color:#5d6166;font-size:11.5px}
+.grid .cabecera{background:#1F3864;color:#fff;font-weight:600;text-align:center;font-size:11.5px}
+.grid tr.urgente td:not(.rownum){background:#F8CBAD}
+.grid tr.dudoso td:not(.rownum){background:#FFE699}
+.grid .lnk{color:#1a56c4;text-decoration:underline}
+.grid .vacia td{height:9px}
+.sheet-tabs{display:flex;gap:3px;padding:7px 10px 0;border-top:1px solid #d6d9dc;background:#f1f3f5}
+.sheet-tab{font-size:11.5px;padding:5px 13px;border-radius:5px 5px 0 0;color:#5d6166;background:#e4e7ea}
+.sheet-tab.on{background:#fff;color:#1b1b1b;font-weight:600}
+
+/* ---------- WhatsApp: también con sus colores ---------- */
+.wa{max-width:430px;background:#0b141a;border:1px solid var(--line);border-radius:20px;padding:14px;display:flex;flex-direction:column;gap:9px}
+.wa-top{display:flex;align-items:center;gap:10px;padding-bottom:11px;border-bottom:1px solid rgba(255,255,255,.1);color:#e9edef}
+.wa-av{width:34px;height:34px;border-radius:50%;background:#2a3942;flex:none;display:grid;place-items:center;font-size:13px;font-weight:700;color:#8696a0}
+.wa-top b{font-size:14px;display:block;font-weight:600}
+.wa-top span{font-size:11.5px;color:#8696a0}
+.wa-dia{align-self:center;background:#182229;color:#8696a0;font-size:11px;padding:3px 11px;border-radius:7px}
+.wa-msg{background:#1f2c33;color:#e9edef;border-radius:10px;padding:9px 11px;font-size:13.5px;line-height:1.45;max-width:94%;align-self:flex-start}
+.wa-msg.urg{border-left:3px solid #ff6b5b}
+.wa-msg b{color:#fff}
+.wa-hora{display:block;font-size:10.5px;color:#8696a0;text-align:right;margin-top:5px}
+
+/* ---------- cierre ---------- */
+.truth{padding:24px 26px}
+.truth h3{font-size:20px;font-weight:600;letter-spacing:-.01em;margin-bottom:12px}
+.truth ul{margin:0;padding-left:20px;color:var(--soft);font-size:16px}
+.truth li{margin-bottom:7px}
+.truth b{color:var(--ink);font-weight:600}
+footer{margin-top:64px;padding-top:24px;border-top:1px solid var(--line);font-size:15px;color:var(--soft);display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap}
+footer .firma{font-family:var(--mono);font-size:13.5px}
+</style>
+</head>
+<body>
+<header class="nav">
+  <a class="logo" href="#inicio"><span class="mk">RV</span><span>Recepción virtual</span></a>
+  <nav aria-label="Secciones">
+    <a href="#llamadas">La llamada</a>
+    <a href="#resumen">El correo</a>
+    <a href="#montado">Qué hay montado</a>
+  </nav>
+  <button class="theme-btn" id="theme-btn" type="button" aria-label="Cambiar entre tema claro y oscuro">
+    <svg class="ico luna" viewBox="0 0 24 24" aria-hidden="true"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg>
+    <svg class="ico sol" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>
+  </button>
+</header>
+<main class="wrap" id="inicio">
+
+  <div class="hero">
+    <p class="kicker">Demostración con un taller de ejemplo</p>
+    <h1>Las llamadas de la tarde dejan de perderse</h1>
+    <p class="lede">El taller cierra a las 15:00 y el teléfono sigue sonando. Una asistente virtual coge esas llamadas, apunta los datos, y a las 7:00 el taller tiene la lista de a quién llamar, los urgentes primero.</p>
+    <div class="hero-actions">
+      <a class="btn-primary" href="#llamadas" id="cta-escuchar">
+        <svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M22 16.9v3a2 2 0 0 1-2.2 2 19.8 19.8 0 0 1-8.6-3.1 19.5 19.5 0 0 1-6-6A19.8 19.8 0 0 1 2.1 4.2 2 2 0 0 1 4.1 2h3a2 2 0 0 1 2 1.7c.1 1 .4 1.9.7 2.8a2 2 0 0 1-.5 2.1L8 9.9a16 16 0 0 0 6 6l1.3-1.3a2 2 0 0 1 2.1-.4c.9.3 1.8.6 2.8.7a2 2 0 0 1 1.7 2z"/></svg>
+        Escuchar una llamada de ejemplo
+      </a>
+      <a class="btn-link" href="#resumen">Ver el correo de las 7:00</a>
+    </div>
+  </div>
+
+  <ol class="dia" aria-label="Qué pasa desde que cierra el taller">
+    <li><span class="hora">15:00</span><b>El taller cierra</b><span class="d">El fijo se desvía solo a la asistente.</span></li>
+    <li><span class="hora">Por la tarde</span><b>Contesta la asistente</b><span class="d">Pregunta los datos, uno por uno.</span></li>
+    <li><span class="hora">Al colgar</span><b>Se guarda la ficha</b><span class="d">Con el audio, por si algo no se entendió.</span></li>
+    <li><span class="hora">07:00</span><b>Llega el resumen</b><span class="d">Un correo con todo lo de la tarde.</span></li>
+  </ol>
+
+  <section id="llamadas">
+    <p class="sec-tag">Ayer, de 15:42 a 19:33</p>
+    <h2>Las llamadas de ayer</h2>
+    <p class="sec-note">Cinco casos de ejemplo de una tarde cualquiera. Elige uno y pulsa <b>Llamar al taller</b>. Mientras hablan, la ficha se va rellenando sola y verás por qué la llamada acaba siendo urgente o no.</p>
+    <div class="picker" id="picker"></div>
+
+    <div class="stage">
+      <div class="phone">
+        <div class="phone-top">
+          <div class="phone-who">
+            <b>Taller Ejemplo</b>
+            <span id="estado"><span class="dot off"></span>Fuera de horario</span>
+          </div>
+          <span class="timer" id="timer">00:00</span>
+        </div>
+        <div class="chat" id="chat">
+          <p class="idle" id="idle">El taller está cerrado.<br>Pulsa para llamar.</p>
+        </div>
+        <div class="controls">
+          <button class="btn-call" id="btn-call">Llamar al taller</button>
+          <button class="btn-ghost" id="btn-voz" aria-pressed="true" title="Activar o quitar el sonido">
+            <svg class="ico on" viewBox="0 0 24 24" aria-hidden="true"><path d="M11 5 6 9H2v6h4l5 4V5z"/><path d="M15.5 8.5a5 5 0 0 1 0 7"/><path d="M19 5a10 10 0 0 1 0 14"/></svg>
+            <svg class="ico off" viewBox="0 0 24 24" aria-hidden="true"><path d="M11 5 6 9H2v6h4l5 4V5z"/><path d="m22 9-6 6"/><path d="m16 9 6 6"/></svg>
+            Sonido
+          </button>
+          <button class="btn-ghost" id="btn-skip" title="Muestra la conversación completa sin esperar">Leerla entera</button>
+        </div>
+        <div class="voicebar">
+          <label for="sel-voz">Voz</label>
+          <select id="sel-voz"><option>Buscando voces…</option></select>
+          <span class="badge-nat" id="badge-nat" hidden>Natural</span>
+        </div>
+        <p class="voice-warn" id="voice-warn"></p>
+      </div>
+
+      <div class="ficha">
+        <h3>Ficha del aviso</h3>
+        <p class="sub" id="ficha-sub">Lo que se apunta mientras el cliente habla.</p>
+        <div class="fields" id="fields">
+          <div class="field" data-k="nombre"><span class="k">Nombre</span><span class="v empty">Pendiente</span></div>
+          <div class="field" data-k="telefono"><span class="k">Teléfono</span><span class="v empty">Pendiente</span></div>
+          <div class="field" data-k="motivo"><span class="k">Motivo</span><span class="v empty">Pendiente</span></div>
+          <div class="field" data-k="vehiculo"><span class="k">Vehículo</span><span class="v empty">Pendiente</span></div>
+          <div class="field" data-k="urgencia"><span class="k">Urgencia</span><span class="v empty">Pendiente</span></div>
+          <div class="field" data-k="observaciones"><span class="k">Observaciones</span><span class="v empty">Pendiente</span></div>
+        </div>
+        <div class="porque">
+          <b>Por qué esta urgencia</b>
+          <p id="porque"></p>
+        </div>
+      </div>
+    </div>
+
+    <div class="reglas">
+      <h3>Cómo decide si una llamada es urgente</h3>
+      <div class="reglas-grid">
+        <div class="regla alta">
+          <span class="pill alta">Urgente</span>
+          <p>El coche está parado, hay una avería que impide circular, ha habido un accidente, o el cliente dice que es urgente.</p>
+        </div>
+        <div class="regla">
+          <span class="pill normal">Normal</span>
+          <p>Todo lo demás, incluso si corre prisa. Por defecto, normal: un falso urgente a las once de la noche desgasta más que un aviso que espera a mañana.</p>
+        </div>
+      </div>
+      <p class="reglas-pie">La asistente no diagnostica la avería ni decide la reparación. Solo separa lo que hay que mirar primero de lo que puede esperar, y el mecánico decide por la mañana.</p>
+    </div>
+  </section>
+
+  <section id="resumen">
+    <p class="sec-tag">Hoy, 07:00</p>
+    <h2>Cómo le llega por la mañana</h2>
+    <p class="sec-note">Las mismas cinco llamadas, en los tres formatos que puede recibir el taller. Se puede activar uno, dos o los tres a la vez.</p>
+
+    <div class="tabs" role="tablist">
+      <button class="tab" role="tab" data-tab="correo" aria-selected="true">Correo</button>
+      <button class="tab" role="tab" data-tab="excel" aria-selected="false">Excel</button>
+      <button class="tab" role="tab" data-tab="whatsapp" aria-selected="false">WhatsApp</button>
+    </div>
+
+    <div class="panel" data-panel="correo">
+    <p class="panel-note"><b>Lo que ya funciona hoy.</b> Llega a las 7:00 con todo lo de la tarde. Desde el móvil, cada teléfono se toca y marca solo.</p>
+
+    <div class="mail">
+      <div class="mail-head">
+        <div class="mail-meta"><span>Para</span><b>taller@example.com</b><span>·</span><span>Hoy, 07:00</span></div>
+        <div class="mail-subject">5 llamadas pendientes (2 urgentes) · Taller Ejemplo</div>
+        <div class="mail-count">Llamadas recibidas ayer entre las 15:00 y las 20:00 · <span class="u">2 urgentes</span></div>
+      </div>
+      <div class="mail-body" id="mail-body"></div>
+    </div>
+    </div>
+
+    <div class="panel" data-panel="excel" hidden>
+      <p class="panel-note"><b>Para imprimirlo y ir tachando</b>, o para guardarlo como histórico. Llega adjunto al correo de las 7:00. Las filas rojas son urgentes; las ámbar tienen algún dato que conviene comprobar escuchando el audio.</p>
+      <div class="sheet">
+        <div class="sheet-scroll">
+          <table class="grid">
+            <tr>
+              <td class="rownum"></td>
+              <td class="colhead">A</td><td class="colhead">B</td><td class="colhead">C</td><td class="colhead">D</td>
+              <td class="colhead">E</td><td class="colhead">F</td><td class="colhead">G</td><td class="colhead">H</td>
+              <td class="colhead">I</td><td class="colhead">J</td>
+            </tr>
+            <tr><td class="rownum">1</td><td class="titulo" colspan="10">Avisos del contestador - Taller Ejemplo - 11/11/2026</td></tr>
+            <tr><td class="rownum">2</td><td class="leyenda" colspan="10">5 aviso(s), 2 urgente(s). Las filas en rojo son urgentes; las ambar tienen algun dato dudoso (mirar la columna Revisar y escuchar el audio).</td></tr>
+            <tr class="vacia"><td class="rownum">3</td><td colspan="10"></td></tr>
+            <tr>
+              <td class="rownum">4</td>
+              <td class="cabecera">Hora</td><td class="cabecera">Urgente</td><td class="cabecera">Nombre</td>
+              <td class="cabecera">Telefono</td><td class="cabecera">Coche</td><td class="cabecera">Matricula</td>
+              <td class="cabecera">Que le pasa</td><td class="cabecera">Revisar</td><td class="cabecera">Audio</td>
+              <td class="cabecera">Estado</td>
+            </tr>
+            <tr class="urgente">
+              <td class="rownum">5</td>
+              <td>15:42</td><td>SI</td><td>Marc Soler Puig</td><td>612345678</td><td>Seat Leon</td><td>4521 KLM</td>
+              <td>Se le ha encendido el testigo de temperatura y el coche echa humo; lo ha dejado aparcado</td>
+              <td></td><td><span class="lnk">oir</span></td><td>nuevo</td>
+            </tr>
+            <tr class="urgente">
+              <td class="rownum">6</td>
+              <td>18:10</td><td>SI</td><td>Anna Vidal</td><td>677000999</td><td>Ford Fiesta</td><td></td>
+              <td>Los frenos hacen un ruido fuerte y el pedal va blando</td>
+              <td>matricula no recogida</td><td><span class="lnk">oir</span></td><td>nuevo</td>
+            </tr>
+            <tr>
+              <td class="rownum">7</td>
+              <td>16:05</td><td></td><td>Laura Gomez</td><td>655501234</td><td>Renault Clio</td><td></td>
+              <td>Quiere pasar revision antes de la ITV</td>
+              <td></td><td><span class="lnk">oir</span></td><td>nuevo</td>
+            </tr>
+            <tr>
+              <td class="rownum">8</td>
+              <td>17:20</td><td></td><td>Jordi Ferrer</td><td>644222111</td><td>VW Golf</td><td>7788 HNP</td>
+              <td>Cambio de aceite y filtros</td>
+              <td></td><td><span class="lnk">oir</span></td><td>nuevo</td>
+            </tr>
+            <tr class="dudoso">
+              <td class="rownum">9</td>
+              <td>19:33</td><td></td><td></td><td>611223344</td><td></td><td></td>
+              <td>Pregunta si arreglan aire acondicionado</td>
+              <td>nombre no recogido</td><td><span class="lnk">oir</span></td><td>nuevo</td>
+            </tr>
+          </table>
+        </div>
+        <div class="sheet-tabs"><span class="sheet-tab on">Avisos</span><span class="sheet-tab">Audios</span></div>
+      </div>
+      <p class="panel-note" style="margin-top:14px">La columna <b>Audio</b> salta a la segunda hoja, donde está cada turno de la conversación por separado. Si una matrícula no quedó clara, se escucha solo ese trozo en vez de la llamada entera.</p>
+    </div>
+
+    <div class="panel" data-panel="whatsapp" hidden>
+      <p class="panel-note"><b>Lo más rápido, y lo único que no espera a las 7:00.</b> Los avisos urgentes salen en el momento de colgar; el resumen del día llega por la mañana.</p>
+      <div class="wa">
+        <div class="wa-top">
+          <span class="wa-av">TE</span>
+          <span><b>Contestador Taller Ejemplo</b><span>mensajes del taller</span></span>
+        </div>
+        <span class="wa-dia">AYER</span>
+        <div class="wa-msg urg">
+          <b>AVISO URGENTE</b>: Marc Soler Puig, telefono 612345678. Coche: Seat Leon (4521 KLM). Se le ha encendido el testigo de temperatura y el coche echa humo; lo ha dejado aparcado.
+          <span class="wa-hora">15:43</span>
+        </div>
+        <div class="wa-msg urg">
+          <b>AVISO URGENTE</b>: Anna Vidal, telefono 677000999. Coche: Ford Fiesta (matricula no recogida). Los frenos hacen un ruido fuerte y el pedal va blando.
+          <span class="wa-hora">18:11</span>
+        </div>
+        <span class="wa-dia">HOY</span>
+        <div class="wa-msg">
+          Contestador: 5 aviso(s) esta tarde, 2 urgente(s), 2 por revisar.
+          <span class="wa-hora">07:00</span>
+        </div>
+      </div>
+      <p class="panel-note" style="margin-top:14px">El texto es fijo y solo cambian los datos: WhatsApp obliga a usar una <b>plantilla aprobada por Meta</b> cuando el mensaje lo empieza el negocio. Darla de alta tarda una o dos semanas, así que conviene lanzarlo pronto si el taller lo quiere.</p>
+    </div>
+  </section>
+
+  <section id="montado">
+    <div class="truth">
+    <h3>Qué está montado y qué no</h3>
+    <ul>
+      <li><b>Funciona hoy:</b> recoger los datos de cada llamada, ordenarlas por urgencia y generar este resumen.</li>
+      <li><b>De los tres formatos:</b> el correo está hecho y funcionando. El Excel y el WhatsApp están diseñados, con el formato ya decidido, pendientes de montar.</li>
+      <li><b>Falta montar:</b> el número de teléfono y el agente de voz que atiende. Es el siguiente paso, y depende del visto bueno del taller.</li>
+      <li><b>En esta página:</b> los cinco avisos son casos de ejemplo y la voz es sintética, no es la grabación de una llamada real.</li>
+      <li><b>En el sistema real</b> cada aviso lleva el audio de la llamada, para resolver una matrícula o un nombre que no se entendiera bien.</li>
+    </ul>
+    </div>
+  </section>
+
+  <footer>
+    <span>El taller no tiene que aprender a usar nada: le llega un correo y llama.</span>
+    <span class="firma">Boris Huarachi · <a href="https://borisdevops.com">borisdevops.com</a></span>
+  </footer>
+</main>
+
+<script>
+/* ---------------- las cinco llamadas ----------------
+   Cada guion sigue el texto de agent/prompt.md. Lo que cambia entre ellas es
+   el caso: dos acaban en urgencia ALTA y tres en NORMAL, por motivos distintos. */
+const SALUDO = 'Hola, has llamado a Taller Ejemplo. Ahora mismo el taller está cerrado, pero soy la asistente virtual y voy a apuntar tus datos para que mañana a primera hora te llamen. La llamada se graba para poder atenderte bien. ¿Te parece bien?';
+
+const CASOS = {
+  marc: {
+    quien:'Marc', etiqueta:'Coche parado', urgencia:'ALTA',
+    porque:'El coche no puede circular. Es el caso más claro de urgencia, y además salta el aviso del 112.',
+    guion:[
+      {who:'bot', text:SALUDO, facts:{telefono:'+34 612 34 56 78'}},
+      {who:'cliente', text:'Sí, sí, claro.'},
+      {who:'bot', text:'¿Cómo te llamas?'},
+      {who:'cliente', text:'Marc Soler Puig.', facts:{nombre:'Marc Soler Puig'}},
+      {who:'bot', text:'¿Qué le pasa al coche o qué necesitas?'},
+      {who:'cliente', text:'Pues se me ha encendido el testigo de la temperatura y el coche echa humo. Lo he tenido que dejar aparcado.',
+       facts:{motivo:'Se le ha encendido el testigo de temperatura y el coche echa humo; lo ha dejado aparcado'}},
+      {who:'bot', text:'Entendido. Si estás en peligro, llama al 112. Para grúa o asistencia en carretera, contacta con tu aseguradora. Apunto tu llamada como urgente para que mañana te atiendan lo primero.',
+       facts:{urgencia:'ALTA'}},
+      {who:'bot', text:'¿Qué coche es? Marca y modelo, y si lo tienes a mano, la matrícula.'},
+      {who:'cliente', text:'Un Seat León del 2016. La matrícula es 4521 KLM.', facts:{vehiculo:'Seat León 2016, 4521 KLM'}},
+      {who:'bot', text:'Te voy a devolver la llamada a este mismo número, ¿verdad? Si prefieres otro, dímelo.'},
+      {who:'cliente', text:'Sí, a este mismo. Pero por la mañana solo puedo hablar hasta las nueve.',
+       facts:{observaciones:'Necesita grúa o que le digan qué hacer; solo puede hablar por la mañana hasta las 9'}},
+      {who:'bot', text:'Perfecto, Marc. Ya está apuntado. Mañana por la mañana te llamarán desde el taller. Que tengas buena noche.'}
+    ]
+  },
+
+  anna: {
+    quien:'Anna', etiqueta:'Frenos', urgencia:'ALTA',
+    porque:'El coche anda, pero no es seguro conducirlo. La asistente no diagnostica: marca urgente y le dice que no lo use.',
+    guion:[
+      {who:'bot', text:SALUDO, facts:{telefono:'+34 677 00 09 99'}},
+      {who:'cliente', text:'Sí, vale.'},
+      {who:'bot', text:'¿Cómo te llamas?'},
+      {who:'cliente', text:'Anna Vidal.', facts:{nombre:'Anna Vidal'}},
+      {who:'bot', text:'¿Qué le pasa al coche o qué necesitas?'},
+      {who:'cliente', text:'Los frenos hacen un ruido muy fuerte y el pedal lo noto blando. La verdad es que me da miedo conducirlo.',
+       facts:{motivo:'Los frenos hacen un ruido fuerte y el pedal va blando', observaciones:'Dice que le da miedo conducirlo'}},
+      {who:'bot', text:'Entendido, Anna. Lo apunto como urgente para que mañana te atiendan lo primero. Mientras tanto, mejor no uses el coche hasta que lo vean.',
+       facts:{urgencia:'ALTA'}},
+      {who:'bot', text:'¿Qué coche es? Marca y modelo, y si lo tienes a mano, la matrícula.'},
+      {who:'cliente', text:'Un Ford Fiesta. La matrícula no me la sé de memoria, lo siento.',
+       facts:{vehiculo:'Ford Fiesta'}},
+      {who:'bot', text:'No pasa nada, ya te la preguntarán mañana. Te devuelvo la llamada a este mismo número, ¿verdad?'},
+      {who:'cliente', text:'Sí, a este.'},
+      {who:'bot', text:'Perfecto, Anna. Ya está apuntado. Mañana por la mañana te llamarán desde el taller. Que tengas buena noche.'}
+    ]
+  },
+
+  laura: {
+    quien:'Laura', etiqueta:'Revisión ITV', urgencia:'NORMAL',
+    porque:'Hay una fecha límite, pero el coche circula. Prisa no es lo mismo que urgencia.',
+    guion:[
+      {who:'bot', text:SALUDO, facts:{telefono:'+34 655 50 12 34'}},
+      {who:'cliente', text:'Sí, perfecto.'},
+      {who:'bot', text:'¿Cómo te llamas?'},
+      {who:'cliente', text:'Laura Gómez.', facts:{nombre:'Laura Gómez'}},
+      {who:'bot', text:'¿Qué le pasa al coche o qué necesitas?'},
+      {who:'cliente', text:'No es que se haya roto nada. Quiero pasarle una revisión antes de llevarlo a la ITV, que me caduca a finales de mes.',
+       facts:{motivo:'Quiere pasar revisión antes de la ITV', observaciones:'La ITV caduca a finales de mes'}},
+      {who:'bot', text:'¿Es urgente? ¿Puedes seguir usando el coche o no?'},
+      {who:'cliente', text:'No, no, puedo usarlo sin problema. Es solo para que lo miren antes.', facts:{urgencia:'NORMAL'}},
+      {who:'bot', text:'¿Qué coche es? Marca y modelo, y si lo tienes a mano, la matrícula.'},
+      {who:'cliente', text:'Un Renault Clio del 2012.', facts:{vehiculo:'Renault Clio 2012'}},
+      {who:'bot', text:'Te voy a devolver la llamada a este mismo número, ¿verdad? Si prefieres otro, dímelo.'},
+      {who:'cliente', text:'Sí, a este mismo.'},
+      {who:'bot', text:'Perfecto, Laura. Ya está apuntado. Mañana por la mañana te llamarán desde el taller. Que tengas buena tarde.'}
+    ]
+  },
+
+  jordi: {
+    quien:'Jordi', etiqueta:'Cambio de aceite', urgencia:'NORMAL',
+    porque:'Mantenimiento, sin prisa. Aquí se ve lo que la asistente NO hace: no da precios. Y confirma el teléfono nuevo dígito a dígito.',
+    guion:[
+      {who:'bot', text:SALUDO, facts:{telefono:'+34 698 76 54 32'}},
+      {who:'cliente', text:'Sí, claro.'},
+      {who:'bot', text:'¿Cómo te llamas?'},
+      {who:'cliente', text:'Jordi Ferrer.', facts:{nombre:'Jordi Ferrer'}},
+      {who:'bot', text:'¿Qué le pasa al coche o qué necesitas?'},
+      {who:'cliente', text:'Quería hacer el cambio de aceite y los filtros. ¿Cuánto me costaría más o menos?',
+       facts:{motivo:'Cambio de aceite y filtros'}},
+      {who:'bot', text:'Eso lo tiene que valorar el mecánico. Lo apunto para que te lo digan cuando te llamen.',
+       facts:{observaciones:'Preguntó por el precio.'}},
+      {who:'bot', text:'¿Es urgente? ¿Puedes seguir usando el coche o no?'},
+      {who:'cliente', text:'No, no corre ninguna prisa.', facts:{urgencia:'NORMAL'}},
+      {who:'bot', text:'¿Qué coche es? Marca y modelo, y si lo tienes a mano, la matrícula.'},
+      {who:'cliente', text:'Un Volkswagen Golf. La matrícula es 7788 HNP.', facts:{vehiculo:'VW Golf, 7788 HNP'}},
+      {who:'bot', text:'Te voy a devolver la llamada a este mismo número, ¿verdad? Si prefieres otro, dímelo.'},
+      {who:'cliente', text:'Mejor al seis cuatro cuatro, dos dos dos, uno uno uno, que es el del trabajo. Y si puede ser, entre las diez y las once.'},
+      {who:'bot', text:'Te lo repito: seis, cuatro, cuatro, dos, dos, dos, uno, uno, uno. ¿Es correcto?'},
+      {who:'cliente', text:'Correcto.',
+       facts:{telefono:'+34 644 22 21 11 · llamó desde +34 698 76 54 32',
+              observaciones:'Prefiere que le llamen entre las 10 y las 11. Preguntó por el precio.'}},
+      {who:'bot', text:'Perfecto, Jordi. Ya está apuntado. Mañana por la mañana te llamarán desde el taller. Que tengas buena tarde.'}
+    ]
+  },
+
+  anon: {
+    quien:'Cliente', etiqueta:'No da el nombre', urgencia:'NORMAL',
+    porque:'No quiere dar el nombre y la asistente no insiste. Un aviso con teléfono y motivo ya sirve; antes esto era una llamada perdida.',
+    guion:[
+      {who:'bot', text:SALUDO, facts:{telefono:'+34 611 22 33 44'}},
+      {who:'cliente', text:'Buenas. Oye, ¿vosotros arregláis el aire acondicionado del coche?'},
+      {who:'bot', text:'Eso te lo confirman mañana cuando te llamen. ¿Cómo te llamas?'},
+      {who:'cliente', text:'Prefiero no darte el nombre, ya hablo yo mañana con ellos.',
+       facts:{nombre:'No lo quiso dar', observaciones:'No quiso dar el nombre'}},
+      {who:'bot', text:'Sin problema. ¿Me dices entonces qué necesitas, para dejarlo apuntado?'},
+      {who:'cliente', text:'Pues eso, saber si arregláis el aire acondicionado. No enfría nada.',
+       facts:{motivo:'Pregunta si arreglan aire acondicionado'}},
+      {who:'bot', text:'Apuntado. ¿Es urgente? ¿Puedes seguir usando el coche o no?'},
+      {who:'cliente', text:'Sí, sí, el coche va perfectamente.',
+       facts:{urgencia:'NORMAL', vehiculo:'No lo dijo'}},
+      {who:'bot', text:'Perfecto. Mañana por la mañana te llamarán desde el taller a este mismo número. Que tengas buena noche.'}
+    ]
+  }
+};
+
+let casoActual = 'marc';
+const GUION = () => CASOS[casoActual].guion;
+
+/* ---------------- los cinco avisos del resumen ---------------- */
+const AVISOS = [
+  {id:'marc', nombre:'Marc Soler Puig', tel:'+34 612 34 56 78', urgencia:'ALTA', hora:'Ayer, 15:42',
+   motivo:'Se le ha encendido el testigo de temperatura y el coche echa humo; lo ha dejado aparcado',
+   vehiculo:'Seat León 2016, 4521 KLM',
+   notas:'Necesita grúa o que le digan qué hacer; solo puede hablar por la mañana hasta las 9', audio:true},
+  {id:'anna', nombre:'Anna Vidal', tel:'+34 677 00 09 99', urgencia:'ALTA', hora:'Ayer, 18:10',
+   motivo:'Los frenos hacen un ruido fuerte y el pedal va blando', vehiculo:'Ford Fiesta',
+   notas:'Dice que le da miedo conducirlo', audio:true},
+  {id:'laura', nombre:'Laura Gómez', tel:'+34 655 50 12 34', urgencia:'NORMAL', hora:'Ayer, 16:05',
+   motivo:'Quiere pasar revisión antes de la ITV', vehiculo:'Renault Clio 2012',
+   notas:'La ITV caduca a finales de mes', audio:true},
+  {id:'jordi', nombre:'Jordi Ferrer', tel:'+34 644 22 21 11', desde:'+34 698 76 54 32', urgencia:'NORMAL', hora:'Ayer, 17:20',
+   motivo:'Cambio de aceite y filtros', vehiculo:'VW Golf, 7788 HNP',
+   notas:'Prefiere que le llamen entre las 10 y las 11. Preguntó por el precio.', audio:true},
+  {id:'anon', nombre:null, tel:'+34 611 22 33 44', urgencia:'NORMAL', hora:'Ayer, 19:33',
+   motivo:'Pregunta si arreglan aire acondicionado', vehiculo:null,
+   notas:'No quiso dar el nombre', audio:true}
+];
+
+const esc = s => String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+const telHref = n => 'tel:' + n.replace(/[^\d+]/g,'');
+
+function tarjeta(a){
+  const row = (k,v) => v ? `<dt>${k}</dt><dd>${v}</dd>` : '';
+  const desde = a.desde ? ` <span class="from">(llamó desde ${esc(a.desde)})</span>` : '';
+  const nombre = a.nombre
+    ? `<span class="aviso-name">${esc(a.nombre)}</span>`
+    : `<span class="aviso-name anon">No dejó el nombre</span>`;
+  return `<article class="aviso ${a.urgencia === 'ALTA' ? 'alta' : ''}" data-id="${a.id}">
+    <div class="aviso-top">${nombre}
+      ${a.urgencia === 'ALTA' ? '<span class="pill alta">Urgente</span>' : ''}
+      <span class="mark" data-mark hidden>La llamada que acabas de oír</span>
+      <button class="play" data-play="${a.id}"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 4.5v15l12-7.5z"/></svg>Oír esta llamada</button>
+    </div>
+    <dl class="rows">
+      ${row('Teléfono', `<a class="tel" href="${telHref(a.tel)}">${esc(a.tel)}</a>${desde}`)}
+      ${row('Motivo', esc(a.motivo))}
+      ${row('Vehículo', a.vehiculo ? esc(a.vehiculo) : '<span class="from">no lo dijo</span>')}
+      ${row('Notas', esc(a.notas))}
+      ${row('Llamó', esc(a.hora))}
+      ${row('Audio', a.audio ? '<span class="from">grabación de la llamada</span>' : '')}
+    </dl>
+  </article>`;
+}
+
+(function pintaResumen(){
+  const urgentes = AVISOS.filter(a => a.urgencia === 'ALTA');
+  const resto    = AVISOS.filter(a => a.urgencia !== 'ALTA');
+  document.getElementById('mail-body').innerHTML =
+    `<h3 class="group-title">Para llamar primero (${urgentes.length})</h3>` + urgentes.map(tarjeta).join('') +
+    `<h3 class="group-title">Resto de llamadas (${resto.length})</h3>` + resto.map(tarjeta).join('');
+})();
+
+/* ---------------- voz ---------------- */
+/* Dos motores de voz: la de Claude (mejor y siempre la misma) y, si aquí no
+   está disponible, las del navegador. El selector deja comparar las dos. */
+let vozActiva = true;
+let motor = 'navegador';                 // 'claude' | 'navegador'
+let vozClaude = null;                    // la capacidad tts, cuando responde
+let vozBot = null, vozCliente = null, vocesEs = [];
+let timbreBot = 'buttery', timbreCliente = 'glassy';
+const TIMBRES = [['buttery','Cálida'],['rounded','Grave'],['airy','Suave'],['glassy','Clara']];
+
+const selVoz = document.getElementById('sel-voz');
+const avisoVoz = document.getElementById('voice-warn');
+const badgeNat = document.getElementById('badge-nat');
+
+/* Las voces neuronales de Edge se llaman "... Online (Natural)"; en Mac e iOS,
+   "Premium" o "Enhanced". Son las que suenan como un altavoz inteligente. */
+const esNatural = v => /natural|online|neural|premium|enhanced|siri/i.test(v.name);
+
+const nombreCorto = v => v.name
+  .replace(/^(Microsoft|Google)\s+/i,'')
+  .replace(/\s*[-(]\s*(spanish|español|espa.ol).*$/i,'')
+  .replace(/\s*online\s*/i,' ')
+  .replace(/\s*\(natural\)\s*/i,'')
+  .trim();
+
+function pintaSelector(){
+  const grupos = [];
+  if (vozClaude){
+    grupos.push('<optgroup label="Voz de Claude">' +
+      TIMBRES.map(([v,n]) => `<option value="c:${v}">${n}</option>`).join('') + '</optgroup>');
+  }
+  if (vocesEs.length){
+    grupos.push('<optgroup label="Voces de este navegador">' +
+      vocesEs.map((v,i) => `<option value="n:${i}">${esc(nombreCorto(v))}${esNatural(v) ? ' · natural' : ''}</option>`).join('') +
+      '</optgroup>');
+  }
+  if (!grupos.length){
+    selVoz.innerHTML = '<option>Sin voz disponible</option>';
+    selVoz.disabled = true;
+    badgeNat.hidden = true;
+    avisoVoz.textContent = 'Aquí no hay ninguna voz en español: la llamada se lee escrita.';
+    avisoVoz.style.display = 'block';
+    return;
+  }
+  const previo = selVoz.value;
+  selVoz.disabled = false;
+  selVoz.innerHTML = grupos.join('');
+  const sigueValiendo = Array.prototype.some.call(selVoz.options, o => o.value === previo);
+  selVoz.value = sigueValiendo ? previo : (vozClaude ? 'c:' + timbreBot : 'n:0');
+  aplicaSeleccion(selVoz.value);
+}
+
+function aplicaSeleccion(val){
+  if (val.charAt(0) === 'c'){
+    motor = 'claude';
+    timbreBot = val.slice(2);
+    timbreCliente = (TIMBRES.find(([v]) => v !== timbreBot) || TIMBRES[0])[0];
+    badgeNat.hidden = false;
+    badgeNat.textContent = 'Voz de Claude';
+    avisoVoz.style.display = 'none';
+  } else {
+    motor = 'navegador';
+    vozBot = vocesEs[Number(val.slice(2))] || null;
+    vozCliente = vocesEs.find(v => v !== vozBot && esNatural(v) === esNatural(vozBot)) || vozBot;
+    const natural = !!(vozBot && esNatural(vozBot));
+    badgeNat.textContent = 'Natural';
+    badgeNat.hidden = !natural;
+    avisoVoz.textContent = vozClaude
+      ? 'Esta voz suena robótica. Arriba del todo tienes la voz de Claude.'
+      : 'Esta voz suena robótica. Abre la página en Microsoft Edge: trae voces neuronales en español.';
+    avisoVoz.style.display = natural ? 'none' : 'block';
+  }
+}
+
+function cargaVoces(){
+  let voces = [];
+  try { voces = window.speechSynthesis ? speechSynthesis.getVoices() : []; } catch(e){ voces = []; }
+  vocesEs = voces.filter(v => /^es/i.test(v.lang));
+  // Primero las naturales, luego las de España, luego por nombre.
+  vocesEs.sort((a,b) => {
+    const n = (esNatural(b) ? 1 : 0) - (esNatural(a) ? 1 : 0);
+    if (n) return n;
+    const e = (/es[-_]ES/i.test(b.lang) ? 1 : 0) - (/es[-_]ES/i.test(a.lang) ? 1 : 0);
+    if (e) return e;
+    return a.name.localeCompare(b.name);
+  });
+  pintaSelector();
+}
+
+if (window.speechSynthesis){
+  cargaVoces();
+  speechSynthesis.onvoiceschanged = cargaVoces;
+} else {
+  pintaSelector();
+}
+
+// La voz de Claude llega más tarde que el resto de la página, o no llega.
+(async () => {
+  try {
+    const t = (window.claude && claude.use) ? await claude.use('tts') : null;
+    if (!t) return;
+    vozClaude = t;
+    pintaSelector();
+    selVoz.value = 'c:' + timbreBot;
+    aplicaSeleccion(selVoz.value);
+  } catch(e){ /* sin voz de Claude: nos quedamos con la del navegador */ }
+})();
+
+const espera = ms => new Promise(r => setTimeout(r, ms));
+const duracionEstimada = t => Math.min(Math.max(t.length * 58, 1200), 11000);
+
+async function habla(texto, quien, mio){
+  const estimado = duracionEstimada(texto);
+  if (!vozActiva) return espera(Math.min(estimado, 2400));
+
+  if (motor === 'claude' && vozClaude){
+    try {
+      await vozClaude.speak(texto, { voice: quien === 'bot' ? timbreBot : timbreCliente, language: 'es' });
+      return;
+    } catch(err){
+      if (mio !== turno) return;                       // han colgado: no es un fallo
+      if (err && err.code === 'rate_limited') return espera(estimado);
+      motor = 'navegador';                             // caemos a la voz del navegador
+      if (vocesEs.length){ selVoz.value = 'n:0'; aplicaSeleccion('n:0'); }
+    }
+  }
+
+  if (!vocesEs.length || !window.speechSynthesis) return espera(estimado);
+  return new Promise(resolve => {
+    let hecho = false;
+    const fin = () => { if (!hecho){ hecho = true; clearTimeout(red); resolve(); } };
+    const red = setTimeout(fin, estimado * 2.2 + 2500);   // red de seguridad: onend no siempre dispara
+    try {
+      const u = new SpeechSynthesisUtterance(texto);
+      u.voice = quien === 'bot' ? vozBot : vozCliente;
+      u.lang = (u.voice && u.voice.lang) || 'es-ES';
+      u.rate = quien === 'bot' ? 1.0 : 1.04;
+      // Solo bajamos el tono si al cliente le ha tocado la misma voz que a la asistente.
+      u.pitch = (quien === 'cliente' && vozCliente === vozBot) ? 0.8 : 1.0;
+      u.onend = fin; u.onerror = fin;
+      speechSynthesis.speak(u);
+    } catch(e){ fin(); }
+  });
+}
+
+/* ---------------- la llamada ---------------- */
+const chat = document.getElementById('chat');
+const idle = document.getElementById('idle');
+const btnCall = document.getElementById('btn-call');
+const btnVoz = document.getElementById('btn-voz');
+const btnSkip = document.getElementById('btn-skip');
+const estado = document.getElementById('estado');
+const timerEl = document.getElementById('timer');
+const fichaSub = document.getElementById('ficha-sub');
+const porqueEl = document.getElementById('porque');
+const picker = document.getElementById('picker');
+
+let turno = 0, cronometro = null, segundos = 0;
+
+function reloj(encendido){
+  clearInterval(cronometro);
+  if (encendido){
+    segundos = 0; timerEl.textContent = '00:00';
+    cronometro = setInterval(() => {
+      segundos++;
+      timerEl.textContent = String(Math.floor(segundos/60)).padStart(2,'0') + ':' + String(segundos%60).padStart(2,'0');
+    }, 1000);
+  }
+}
+
+function burbuja(t){
+  const d = document.createElement('div');
+  d.className = 'bubble ' + t.who;
+  d.innerHTML = `<span class="lbl">${t.who === 'bot' ? 'Asistente' : esc(CASOS[casoActual].quien)}</span>${esc(t.text)}`;
+  chat.appendChild(d);
+  chat.scrollTop = chat.scrollHeight;
+}
+
+function pinta(k, valor){
+  const campo = document.querySelector(`.field[data-k="${k}"]`);
+  if (!campo) return;
+  const v = campo.querySelector('.v');
+  v.classList.remove('empty');
+  v.innerHTML = k === 'urgencia'
+    ? `<span class="pill ${valor === 'ALTA' ? 'alta' : 'normal'}">${valor === 'ALTA' ? 'Urgente' : 'Normal'}</span>`
+    : esc(valor);
+  campo.classList.remove('just-filled');
+  void campo.offsetWidth;
+  campo.classList.add('just-filled');
+}
+
+function callaTodo(){
+  try { if (window.speechSynthesis) speechSynthesis.cancel(); } catch(e){}
+  try { if (vozClaude) vozClaude.stop(); } catch(e){}
+}
+
+function limpia(){
+  callaTodo();
+  chat.querySelectorAll('.bubble').forEach(b => b.remove());
+  document.querySelectorAll('.field .v').forEach(v => { v.classList.add('empty'); v.textContent = 'Pendiente'; });
+  document.querySelectorAll('.field').forEach(f => f.classList.remove('just-filled'));
+  document.querySelectorAll('[data-mark]').forEach(m => m.hidden = true);
+  idle.style.display = '';
+}
+
+function marcaAviso(){
+  const m = document.querySelector(`.aviso[data-id="${casoActual}"] [data-mark]`);
+  if (m) m.hidden = false;
+}
+
+/* Cambia de llamada: repinta las fichas del selector y deja el teléfono listo. */
+function eligeCaso(id, arrancar){
+  if (!CASOS[id]) return;
+  casoActual = id;
+  turno++;
+  limpia();
+  reloj(false);
+  timerEl.textContent = '00:00';
+  enCurso(false);
+  btnCall.textContent = 'Llamar al taller';
+  document.querySelectorAll('.chip').forEach(c =>
+    c.setAttribute('aria-pressed', String(c.dataset.caso === id)));
+  const a = AVISOS.find(x => x.id === id);
+  fichaSub.textContent = (a && a.nombre ? a.nombre : 'Llamada sin nombre') + ' · ' + (a ? a.hora : '');
+  porqueEl.textContent = CASOS[id].porque;
+  if (arrancar) llama();
+}
+
+function enCurso(si){
+  estado.innerHTML = si
+    ? '<span class="dot"></span>Llamada en curso'
+    : '<span class="dot off"></span>Fuera de horario';
+  btnCall.textContent = si ? 'Colgar' : 'Repetir la llamada';
+  btnCall.classList.toggle('colgar', si);
+}
+
+async function llama(){
+  const mio = ++turno;
+  limpia();
+  idle.style.display = 'none';
+  enCurso(true);
+  reloj(true);
+  for (const t of GUION()){
+    if (mio !== turno) return;
+    burbuja(t);
+    await habla(t.text, t.who, mio);
+    if (mio !== turno) return;
+    if (t.facts) for (const k in t.facts) pinta(k, t.facts[k]);
+    await espera(320);
+  }
+  if (mio !== turno) return;
+  reloj(false);
+  enCurso(false);
+  marcaAviso();
+}
+
+function alFinal(){
+  turno++;
+  limpia();
+  idle.style.display = 'none';
+  reloj(false);
+  timerEl.textContent = '01:34';
+  enCurso(false);
+  GUION().forEach(t => burbuja(t));
+  GUION().forEach(t => { if (t.facts) for (const k in t.facts) pinta(k, t.facts[k]); });
+  marcaAviso();
+  chat.scrollTop = chat.scrollHeight;
+}
+
+btnCall.addEventListener('click', () => {
+  const sonando = estado.textContent.indexOf('curso') !== -1;
+  if (sonando){ turno++; reloj(false); enCurso(false); callaTodo();
+  } else {
+    llama();
+  }
+});
+
+btnVoz.addEventListener('click', () => {
+  vozActiva = !vozActiva;
+  btnVoz.setAttribute('aria-pressed', String(vozActiva));
+  if (!vozActiva) callaTodo();
+});
+
+btnSkip.addEventListener('click', alFinal);
+
+selVoz.addEventListener('change', e => {
+  callaTodo();
+  aplicaSeleccion(e.target.value);
+});
+
+/* ---------------- selector de llamada ---------------- */
+picker.innerHTML = AVISOS.map(a => {
+  const c = CASOS[a.id];
+  return `<button class="chip" data-caso="${a.id}" aria-pressed="${a.id === casoActual}">
+    <span class="pill ${c.urgencia === 'ALTA' ? 'alta' : 'normal'}">${c.urgencia === 'ALTA' ? 'Urgente' : 'Normal'}</span>
+    <span class="chip-txt"><b>${esc(c.quien)}</b><span>${esc(c.etiqueta)}</span></span>
+  </button>`;
+}).join('');
+
+picker.addEventListener('click', e => {
+  const b = e.target.closest('.chip');
+  if (b) eligeCaso(b.dataset.caso, false);
+});
+
+document.getElementById('mail-body').addEventListener('click', e => {
+  const b = e.target.closest('[data-play]');
+  if (!b) return;
+  eligeCaso(b.dataset.play, true);
+  picker.scrollIntoView({ behavior: 'smooth', block: 'center' });
+});
+
+eligeCaso('marc', false);
+
+// El botón de arriba lleva a la llamada de Marc y la arranca: el clic permite sonar.
+document.getElementById('cta-escuchar').addEventListener('click', () => {
+  eligeCaso('marc', true);
+});
+
+/* ---------------- tema claro / oscuro ---------------- */
+(function tema(){
+  const raiz = document.documentElement;
+  const guardado = localStorage.getItem('tema');
+  if (guardado) raiz.dataset.theme = guardado;
+  document.getElementById('theme-btn').addEventListener('click', () => {
+    const oscuro = raiz.dataset.theme
+      ? raiz.dataset.theme === 'dark'
+      : matchMedia('(prefers-color-scheme: dark)').matches;
+    raiz.dataset.theme = oscuro ? 'light' : 'dark';
+    localStorage.setItem('tema', raiz.dataset.theme);
+  });
+})();
+
+/* ---------------- pestañas de formato ---------------- */
+document.querySelector('.tabs').addEventListener('click', e => {
+  const b = e.target.closest('.tab');
+  if (!b) return;
+  document.querySelectorAll('.tab').forEach(t => t.setAttribute('aria-selected', String(t === b)));
+  document.querySelectorAll('.panel').forEach(p => { p.hidden = p.dataset.panel !== b.dataset.tab; });
+});
+</script>
+</body>
+</html>
